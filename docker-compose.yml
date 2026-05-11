@@ -1,0 +1,51 @@
+networks:
+  services-network:
+    driver: bridge
+volumes:
+  gobank_pj_mephi_postgres_data:
+services:
+  postgres-db:
+    image: postgres:16-alpine
+    container_name: gobank_postgres_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - gobank_pj_mephi_postgres_data:/var/lib/postgresql/data
+      - ./bank-service/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5433:5432"
+    networks:
+      - services-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  bank-service:
+    build:
+      context: ./bank-service
+      dockerfile: Dockerfile
+      args:
+        SERVER_PORT: ${SERVER_PORT}
+    container_name: gobank_bank_service
+    environment:
+      DATABASE_URL: "host=postgres-db port=5432 user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=${POSTGRES_DB} sslmode=disable"
+      SERVER_PORT: ${SERVER_PORT}
+      JWT_SECRET: ${JWT_SECRET}
+      PGP_PRIVATE_KEY: "${PGP_PRIVATE_KEY}"
+      PGP_PRIVATE_KEY_PASSPHRASE: ${PGP_PRIVATE_KEY_PASSPHRASE}
+      HMAC_SECRET_KEY: ${HMAC_SECRET_KEY}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USERNAME: ${SMTP_USERNAME}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM: ${SMTP_FROM}
+    ports:
+      - "${BANK_SERVICE_PORT}:${SERVER_PORT}"
+    networks:
+      - services-network
+    depends_on:
+      postgres-db:
+        condition: service_healthy
